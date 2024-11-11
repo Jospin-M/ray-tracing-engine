@@ -4,8 +4,8 @@
 Light light;
 
 int main(int argc, char *argv[]) {
-    FILE *input = stdin;
-    FILE *output = stdout;
+    FILE *input;
+    FILE *output;
     
     if(argc >= 3) {
         input = fopen(argv[1], "r");
@@ -17,6 +17,7 @@ int main(int argc, char *argv[]) {
         }
 
         output = fopen(argv[2], "w");
+
         if(output == NULL) {
 
             fprintf(stderr, "Error opening output stream: %s\n", argv[2]);
