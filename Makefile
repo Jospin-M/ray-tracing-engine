@@ -15,10 +15,10 @@ FS: # TODO ...
 # Object files
 # TODO: Makefile rules to compile source files into object files
 assg.o: ./src/assg.c ./src/assg.h
-	gcc -Wall -std=c99 -c ./src/assg.c
+	gcc -Wall -Werror -std=c99 -c ./src/assg.c
 
 spheres.o: ./src/spheres.c ./src/spheres.h
-	gcc -Wall -std=c99 -c ./src/spheres.c
+	gcc -Wall -Werror -std=c99 -c ./src/spheres.c
 
 vector.o: ./src/vector.c ./src/vector.h
-	gcc -Wall -std=c99 -c ./src/vector.c
+	gcc -Wall -Werror -std=c99 -c ./src/vector.c
