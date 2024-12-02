@@ -2,6 +2,7 @@
 #define COLOR_H
 
 #include "vector.h"
+#include "spheres.h"
 #include <stdio.h>
 
 Vec3 unpackRGB(unsigned int packedRGB);

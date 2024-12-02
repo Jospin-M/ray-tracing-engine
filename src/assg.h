@@ -1,5 +1,6 @@
 #include "vector.h"
 #include <stdlib.h>
+#include <stdbool.h>
 
 typedef struct {
     const Vec3 position;
@@ -15,4 +16,7 @@ typedef struct {
     float brightness;
 } Light;
 
-void output_(World w, Vec3 backgroundColor, Light light, FILE *input, FILE *output, Camera c, int numSpheres);
+void createImage(World world, Camera camera, Light light, FILE *outputFile, int imageWidth, int imageHeight);
+Vec3 computeRayDirection(int x, int y, int imageWidth, int imageHeight, Camera camera);
+Vec3 renderPixel(Vec3 rayOrigin, Vec3 rayDir, World world, Light light);
+bool inShadow(Vec3 intersectionPoint, Vec3 normal, Vec3 lightPosition, World world);

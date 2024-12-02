@@ -31,7 +31,8 @@ Vec3 scalarMultiply(float s, Vec3 v) {
 
 Vec3 scalarDivide(Vec3 v, float d) {
     if(d == 0) {
-        return (Vec3) {-9999, -9999, -9999};
+        fprintf(stderr, "Divide by 0 error.\n");
+        exit(12);
     }
     
     float inverse = 1 / d;

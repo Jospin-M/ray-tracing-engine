@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include "spheres.h"
 #include "assg.h"
+#include "color.h"
+#include <math.h>
 Light light;
 
 int main(int argc, char *argv[]) {
@@ -53,7 +55,7 @@ int main(int argc, char *argv[]) {
 
     int backgroundColorIndex;
     fscanf(input, "%d", &backgroundColorIndex);
-    Vec3 backgroundColor = (Vec3) {0.0, 0.0, 0.0};
+    //Vec3 backgroundColor = (Vec3) {0.0, 0.0, 0.0};
 
     int numSpheres;
     fscanf(input, "%d", &numSpheres);
@@ -82,9 +84,9 @@ int main(int argc, char *argv[]) {
         }
 
         addSphere(&w, s);
-    }
+    } 
 
-    output_(w, backgroundColor, light, input, output, c, numSpheres);    
+    createImage(w, c, light, output, imageWidth, imageHeight);
 
     freeWorld(&w);
     fclose(input);
@@ -93,51 +95,99 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-void output_(World w, Vec3 backgroundColor, Light light, FILE *input, FILE *output, Camera c, int numSpheres) {
-    Vec3 t = add(backgroundColor, light.position);
-    fprintf(output, "(%.1f, %.1f, %.1f) + (%.1f, %.1f, %.1f) = ", backgroundColor.x, backgroundColor.y, backgroundColor.z, light.position.x, light.position.y, light.position.z);
-    fprintf(output, "(%.1f, %.1f, %.1f)\n", t.x, t.y, t.z);
+void createImage(World world, Camera camera, Light light, FILE *outputFile, int imageWidth, int imageHeight) {
+    /*
+        Renders the scene using ray traicing.
+    */
 
-    Vec3 u = subtract(backgroundColor, light.position);
-    fprintf(output, "(%.1f, %.1f, %.1f) - (%.1f, %.1f, %.1f) = ", backgroundColor.x, backgroundColor.y, backgroundColor.z, light.position.x, light.position.y, light.position.z);
-    fprintf(output, "(%.1f, %.1f, %.1f)\n", u.x, u.y, u.z);
-    
-    fprintf(output, "%.1f * (%.1f, %.1f, %.1f) = ",  c.viewportWidth, light.position.x, light.position.y, light.position.z);
-    Vec3 v = scalarMultiply(c.viewportWidth, light.position);
-    fprintf(output, "(%.1f, %.1f, %.1f)\n", v.x, v.y, v.z);
+    // write the PPM image header to the file
+    fprintf(outputFile, "P3\n%d %d\n255\n", imageWidth, imageHeight);
 
-    Vec3 x = normalize(light.position);
-    fprintf(output, "normalize(%.1f, %.1f, %.1f) = (%.1f, %.1f, %.1f)\n\n", light.position.x, light.position.y, light.position.z,
-    x.x, x.y, x.z);
 
-    for(int i = 0; i < numSpheres; i++) {
-        Vec3 y = scalarDivide(w.spheres[i]->color, w.spheres[i]->r);
+    // iterate through the each pixel
+    for(int y = 0; y < imageHeight; y++) {
+        for(int x = 0; x < imageWidth; x++) {
+            // compute horizontal (u) and vertical (v) coordinates of pixel
+            float u = (-(camera.viewportWidth) / 2) + ((x + 0.5) * (camera.viewportWidth / imageWidth));
+            float v = (camera.viewportHeight / 2) - ((y + 0.5) * (camera.viewportHeight / imageHeight));
+            
+            Vec3 rayDir = normalize((Vec3){u, v, -camera.focalLength});
+            Vec3 pixelColor = renderPixel(camera.position, rayDir, world, light);
 
-        if(y.x == -9999) { 
-            fprintf(stderr, "Division by zero.\n");
-            freeWorld(&w);
-            fclose(input);
-            fclose(output);
-
-            exit(1);
+            fprintf(outputFile, "%d %d %d ", (int) pixelColor.x, (int) pixelColor.y, (int) pixelColor.z);
         }
 
-        fprintf(output, "(1.0, 1.0, 1.0) / %.1f = ", w.spheres[i]->r);
-        fprintf(output, "(%.1f, %.1f, %.1f)\n", y.x, y.y, y.z);
+        fprintf(outputFile, "\n"); // move to a new row
+    }
+}
 
-        float z = dot(light.position, w.spheres[i]->pos);
-        fprintf(output, "dot((%.1f, %.1f, %.1f), (%.1f, %.1f, %.1f)) = %.1f\n", light.position.x, light.position.y, light.position.z,
-        w.spheres[i]->pos.x, w.spheres[i]->pos.y, w.spheres[i]->pos.z, z);
+Vec3 renderPixel(Vec3 rayOrigin, Vec3 rayDir, World world, Light light) {
+    /*
+        Determines the color of a pixel.
+    */
 
-        float a = distance(light.position, w.spheres[i]->pos);
-        fprintf(output, "distance((%.1f, %.1f, %.1f), (%.1f, %.1f, %.1f)) = %.1f\n", light.position.x, light.position.y, light.position.z,
-        w.spheres[i]->pos.x, w.spheres[i]->pos.y, w.spheres[i]->pos.z, a);
+    Sphere *closestSphere = NULL;
+    float closestT = 1e9; // arbitrary large value for initial comparison
 
-        float b = length(w.spheres[i]->pos);
-        fprintf(output, "length(%.1f, %.1f, %.1f) = %.1f\n", w.spheres[i]->pos.x, w.spheres[i]->pos.y, w.spheres[i]->pos.z, b);
-        
-        if(i < numSpheres - 1) {
-            fprintf(output, "\n");
+    // find the closest sphere to the ray along with the distance
+
+    for(int i = 0; i < world.size; i++) {
+        float t;
+
+        if(doesIntersect(world.spheres[i], rayOrigin, rayDir, &t)) {
+            if(t < closestT) {
+                closestT = t;
+                closestSphere = world.spheres[i];
+            }
         }
     }
+
+    if(closestSphere == NULL) {
+        return (Vec3) {0, 0, 0}; // return the color black
+    }
+
+    // calculating final pixel color 
+
+    Vec3 intersectionPoint = add(rayOrigin, scalarMultiply(closestT, rayDir));
+    Vec3 normal = normalize(subtract(intersectionPoint, closestSphere->pos));
+    Vec3 lightDir = normalize(subtract(light.position, intersectionPoint));
+
+    float dotDN = fmaxf(0.0, dot(normal, lightDir));
+    float distanceToLight = length(subtract(light.position, intersectionPoint));
+    float intensity = light.brightness * (dotDN / (distanceToLight * distanceToLight));
+    intensity = fminf(1.0, intensity);
+
+    if(inShadow(intersectionPoint, normal, light.position, world)) {
+        intensity *= 0.1; // reduce intensity for shadowed areas
+    }
+
+    return scalarMultiply(intensity, (Vec3) {255, 255, 255}); // return a shade of white
+}
+
+bool inShadow(Vec3 intersectionPoint, Vec3 normal, Vec3 lightPosition, World world) {
+    /*
+        Determines if a point is in the shadow.
+    */
+
+    float epsilon = 0.001; // offset to avoid precision errors
+    float distanceToLight = length(subtract(lightPosition, intersectionPoint));
+
+    // offset the origin of the shadow ray to avoid self-intersection
+
+    Vec3 shadowRayOrigin = add(intersectionPoint, scalarMultiply(epsilon, normal));
+    Vec3 shadowRayDir = normalize(subtract(lightPosition, intersectionPoint));
+    
+    // if an object intersects and is closer than the light source, the point is in the shadow
+
+    for(int i = 0; i < world.size; i++) {
+        float t;
+
+        if(doesIntersect(world.spheres[i], shadowRayOrigin, shadowRayDir, &t)) {
+            if(t > 0 && t < distanceToLight) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
