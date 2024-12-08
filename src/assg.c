@@ -3,6 +3,7 @@
 #include "assg.h"
 #include "color.h"
 #include <math.h>
+
 Light light;
 
 int main(int argc, char *argv[]) {
@@ -47,15 +48,24 @@ int main(int argc, char *argv[]) {
     int numColors;
     fscanf(input, "%d", &numColors);
 
-    unsigned int colors[numColors];
-    
-    for(int i = 0; i < sizeof(colors) / sizeof(colors[0]); i++) {
+    int colors[numColors];
+
+    for(int i = 0; i < numColors; i++) {
         fscanf(input, "%x", &colors[i]);
     }
 
+    // sort colors
+    qsort(colors, numColors, sizeof(int), compareColor);
+
+    Vec3 *rgbColors = malloc(numColors * sizeof(Vec3));
+
+    for(int i = 0; i < numColors; i++) {
+        rgbColors[i] = unpackRGB(colors[i]);
+    }
+    
     int backgroundColorIndex;
     fscanf(input, "%d", &backgroundColorIndex);
-    //Vec3 backgroundColor = (Vec3) {0.0, 0.0, 0.0};
+    Vec3 backgroundColor = rgbColors[backgroundColorIndex];
 
     int numSpheres;
     fscanf(input, "%d", &numSpheres);
@@ -65,18 +75,19 @@ int main(int argc, char *argv[]) {
 
     for(int i = 0; i < numSpheres; i++) {
         float radius;
-        Vec3 position;
-        Vec3 color = {1.0, 1.0, 1.0};
         int colorIndex;
+        Vec3 position;
 
         fscanf(input, "%f %f %f", &position.x, &position.y, &position.z);
         fscanf(input, "%f", &radius); 
         fscanf(input, "%d", &colorIndex);
-        Sphere *s = createSphere(radius, position, color);
+        
+        Sphere *s = createSphere(radius, position, rgbColors[colorIndex]);
         
         if(s == NULL) {
             fprintf(stderr, "Memory allocation failure.\n");
             freeWorld(&w);
+            free(rgbColors);
             fclose(input);
             fclose(output);
 
@@ -86,34 +97,31 @@ int main(int argc, char *argv[]) {
         addSphere(&w, s);
     } 
 
-    createImage(w, c, light, output, imageWidth, imageHeight);
+    createImage(w, c, light, output, imageWidth, imageHeight, backgroundColor);
 
     freeWorld(&w);
+    free(rgbColors);
     fclose(input);
     fclose(output);
     
     return 0;
 }
 
-void createImage(World world, Camera camera, Light light, FILE *outputFile, int imageWidth, int imageHeight) {
+void createImage(World world, Camera camera, Light light, FILE *outputFile, int imageWidth, int imageHeight, Vec3 backgroundColor) {
     /*
         Renders the scene using ray traicing.
     */
 
     // write the PPM image header to the file
+    
     fprintf(outputFile, "P3\n%d %d\n255\n", imageWidth, imageHeight);
 
-
     // iterate through the each pixel
+
     for(int y = 0; y < imageHeight; y++) {
         for(int x = 0; x < imageWidth; x++) {
-            // compute horizontal (u) and vertical (v) coordinates of pixel
-            float u = (-(camera.viewportWidth) / 2) + ((x + 0.5) * (camera.viewportWidth / imageWidth));
-            float v = (camera.viewportHeight / 2) - ((y + 0.5) * (camera.viewportHeight / imageHeight));
+            Vec3 pixelColor = getAntiAliasedColor(world, light, camera, x, y, imageWidth, imageHeight, backgroundColor);
             
-            Vec3 rayDir = normalize((Vec3){u, v, -camera.focalLength});
-            Vec3 pixelColor = renderPixel(camera.position, rayDir, world, light);
-
             fprintf(outputFile, "%d %d %d ", (int) pixelColor.x, (int) pixelColor.y, (int) pixelColor.z);
         }
 
@@ -121,7 +129,31 @@ void createImage(World world, Camera camera, Light light, FILE *outputFile, int 
     }
 }
 
-Vec3 renderPixel(Vec3 rayOrigin, Vec3 rayDir, World world, Light light) {
+Vec3 getAntiAliasedColor(World world, Light light, Camera camera, int x, int y, int imageWidth, int imageHeight, Vec3 backgroundColor) {
+    /*
+        Computes the final color of a pixel using anti-aliasing.
+    */
+    
+    Vec3 initialColor = (Vec3) {0, 0, 0};
+    int gridSize = 2;
+
+    for(int i = 0; i < gridSize; i++) {
+        for(int j = 0; j < gridSize; j++) {
+            float offsetX = (i + 0.5) / gridSize;
+            float offsetY = (j + 0.5) / gridSize;
+            float u = (-(camera.viewportWidth) / 2) + ((x + offsetX) * (camera.viewportWidth / imageWidth));
+            float v = (camera.viewportHeight / 2) - ((y + offsetY) * (camera.viewportHeight / imageHeight));
+
+            Vec3 rayDir = normalize((Vec3){u, v, -camera.focalLength});
+            Vec3 subPixelColor = renderPixel((Vec3) {0, 0, 0}, rayDir, world, light, backgroundColor);
+            initialColor = add(initialColor, subPixelColor);
+        }
+    }
+
+    return scalarDivide(initialColor, gridSize * gridSize);
+}
+
+Vec3 renderPixel(Vec3 rayOrigin, Vec3 rayDir, World world, Light light, Vec3 backgroundColor) {
     /*
         Determines the color of a pixel.
     */
@@ -143,7 +175,7 @@ Vec3 renderPixel(Vec3 rayOrigin, Vec3 rayDir, World world, Light light) {
     }
 
     if(closestSphere == NULL) {
-        return (Vec3) {0, 0, 0}; // return the color black
+        return backgroundColor;
     }
 
     // calculating final pixel color 
@@ -161,7 +193,7 @@ Vec3 renderPixel(Vec3 rayOrigin, Vec3 rayDir, World world, Light light) {
         intensity *= 0.1; // reduce intensity for shadowed areas
     }
 
-    return scalarMultiply(intensity, (Vec3) {255, 255, 255}); // return a shade of white
+    return scalarMultiply(intensity, closestSphere->color);
 }
 
 bool inShadow(Vec3 intersectionPoint, Vec3 normal, Vec3 lightPosition, World world) {

@@ -16,7 +16,7 @@ typedef struct {
     float brightness;
 } Light;
 
-void createImage(World world, Camera camera, Light light, FILE *outputFile, int imageWidth, int imageHeight);
-Vec3 computeRayDirection(int x, int y, int imageWidth, int imageHeight, Camera camera);
-Vec3 renderPixel(Vec3 rayOrigin, Vec3 rayDir, World world, Light light);
+void createImage(World world, Camera camera, Light light, FILE *outputFile, int imageWidth, int imageHeight, Vec3 backgroundColor);
+Vec3 renderPixel(Vec3 rayOrigin, Vec3 rayDir, World world, Light light, Vec3 backgroundColor);
 bool inShadow(Vec3 intersectionPoint, Vec3 normal, Vec3 lightPosition, World world);
+Vec3 getAntiAliasedColor(World world, Light light, Camera camera, int x, int y, int imageWidth, int imageHeight, Vec3 backgroundColor);
